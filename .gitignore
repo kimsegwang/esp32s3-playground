@@ -1,0 +1,15 @@
+# Arduino build outputs
+build/
+*.bin
+*.elf
+*.map
+
+# Wi-Fi credentials etc.
+secrets.h
+
+# Python
+__pycache__/
+*.py[cod]
+
+# MediaPipe 모델 (hand_blink.py가 자동 다운로드)
+host/models/

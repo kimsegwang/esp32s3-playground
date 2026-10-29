@@ -1,0 +1,12 @@
+name: esp32cam
+channels:
+  - conda-forge
+dependencies:
+  - python=3.11
+  - pip
+  - pip:
+      # mediapipe가 opencv-contrib-python에 의존한다. opencv-python과 같은 cv2 폴더를 쓰므로 둘 중 하나만 설치할 것
+      - opencv-contrib-python
+      - pyserial
+      - requests
+      - mediapipe
