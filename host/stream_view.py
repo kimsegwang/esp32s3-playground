@@ -10,7 +10,7 @@ import time
 
 import cv2
 
-from esp32cam_stream import MjpegStream, should_quit
+from esp32cam_stream import MjpegStream, should_quit, waiting_screen
 
 WINDOW = "esp32cam"
 
@@ -32,6 +32,7 @@ def main() -> int:
             if frame is None:
                 if stream.error:
                     print(f"waiting... {stream.error}", file=sys.stderr)
+                cv2.imshow(WINDOW, waiting_screen(url, stream.error))
                 if should_quit(WINDOW):
                     break
                 time.sleep(0.5)

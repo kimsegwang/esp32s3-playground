@@ -8,6 +8,8 @@
 //   GET /stream      MJPEG 스트림
 //
 // 와이파이 정보는 secrets.h (secrets.h.example 참고, 깃에 올리지 않음)
+//
+// 발열을 줄이기 위해 카메라는 /stream, /capture 요청이 있는 동안에만 켜고, 마지막 요청이 끝나면 끈다.
 
 #include <WiFi.h>
 #include <ESPmDNS.h>
@@ -45,6 +47,10 @@ static volatile uint32_t blinkMs = 1000;
 
 static httpd_handle_t controlServer = NULL;
 static httpd_handle_t streamServer = NULL;
+
+// 카메라를 쓰고 있는 요청 수. 포트 80/81 서버가 서로 다른 태스크라 뮤텍스로 보호
+static SemaphoreHandle_t cameraLock = NULL;
+static int cameraUsers = 0;
 
 static bool initCamera() {
   camera_config_t config = {};
@@ -87,22 +93,56 @@ static bool initCamera() {
   return true;
 }
 
+// 첫 사용자가 들어올 때 카메라를 켠다
+static bool acquireCamera() {
+  bool ok = true;
+  xSemaphoreTake(cameraLock, portMAX_DELAY);
+  if (cameraUsers == 0) {
+    ok = initCamera();
+    if (ok) {
+      Serial.println("camera on");
+    }
+  }
+  if (ok) {
+    cameraUsers++;
+  }
+  xSemaphoreGive(cameraLock);
+  return ok;
+}
+
+// 마지막 사용자가 나가면 카메라를 끈다
+static void releaseCamera() {
+  xSemaphoreTake(cameraLock, portMAX_DELAY);
+  if (--cameraUsers == 0) {
+    esp_camera_deinit();
+    Serial.println("camera off");
+  }
+  xSemaphoreGive(cameraLock);
+}
+
 static esp_err_t statusHandler(httpd_req_t *req) {
-  char json[96];
-  snprintf(json, sizeof(json), "{\"blink_ms\":%lu,\"rssi\":%d}", (unsigned long)blinkMs, WiFi.RSSI());
+  char json[112];
+  snprintf(json, sizeof(json), "{\"blink_ms\":%lu,\"rssi\":%d,\"camera_users\":%d}", (unsigned long)blinkMs,
+           WiFi.RSSI(), cameraUsers);
   httpd_resp_set_type(req, "application/json");
   return httpd_resp_sendstr(req, json);
 }
 
 static esp_err_t captureHandler(httpd_req_t *req) {
+  if (!acquireCamera()) {
+    httpd_resp_send_500(req);
+    return ESP_FAIL;
+  }
   camera_fb_t *fb = esp_camera_fb_get();
   if (!fb) {
+    releaseCamera();
     httpd_resp_send_500(req);
     return ESP_FAIL;
   }
   httpd_resp_set_type(req, "image/jpeg");
   esp_err_t res = httpd_resp_send(req, (const char *)fb->buf, fb->len);
   esp_camera_fb_return(fb);
+  releaseCamera();
   return res;
 }
 
@@ -127,6 +167,10 @@ static esp_err_t streamHandler(httpd_req_t *req) {
     return res;
   }
   httpd_resp_set_hdr(req, "Access-Control-Allow-Origin", "*");
+  if (!acquireCamera()) {
+    httpd_resp_send_500(req);
+    return ESP_FAIL;
+  }
 
   // 클라이언트가 끊을 때까지 계속 전송
   while (res == ESP_OK) {
@@ -146,6 +190,7 @@ static esp_err_t streamHandler(httpd_req_t *req) {
     }
     esp_camera_fb_return(fb);
   }
+  releaseCamera();
   return res;
 }
 
@@ -194,6 +239,7 @@ void setup() {
   pinMode(LED_BUILTIN, OUTPUT);
   digitalWrite(LED_BUILTIN, HIGH);  // active-low: 꺼진 상태로 시작
 
+  // 부팅 시 카메라 연결만 확인하고 바로 끈다 (실제 사용은 요청이 올 때)
   if (!initCamera()) {
     // 카메라 실패 시 LED를 빠르게 깜빡여 표시
     while (true) {
@@ -201,6 +247,8 @@ void setup() {
       delay(100);
     }
   }
+  esp_camera_deinit();
+  cameraLock = xSemaphoreCreateMutex();
 
   connectWiFi();
   if (MDNS.begin(MDNS_NAME)) {

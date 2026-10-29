@@ -10,6 +10,18 @@ import requests
 _CONTENT_LENGTH = re.compile(rb"Content-Length:\s*(\d+)", re.IGNORECASE)
 
 
+def waiting_screen(url: str, error: str | None, size=(640, 480)) -> np.ndarray:
+    """첫 프레임이 오기 전에 띄울 안내 화면."""
+    image = np.full((size[1], size[0], 3), 40, np.uint8)
+    dots = "." * (int(time.monotonic() * 2) % 4)
+    cv2.putText(image, f"connecting{dots}", (20, 200), cv2.FONT_HERSHEY_SIMPLEX, 1.0, (255, 255, 255), 2)
+    cv2.putText(image, url, (20, 240), cv2.FONT_HERSHEY_SIMPLEX, 0.6, (200, 200, 200), 1)
+    if error:
+        cv2.putText(image, "retrying (check board power / WiFi)", (20, 280), cv2.FONT_HERSHEY_SIMPLEX, 0.6,
+                    (0, 165, 255), 1)
+    return image
+
+
 def should_quit(window: str) -> bool:
     """q/ESC를 눌렀거나 창의 X 버튼으로 닫았으면 True. 창은 미리 cv2.namedWindow로 만들어 둘 것.
 

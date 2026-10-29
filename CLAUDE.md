@@ -63,6 +63,7 @@ firmware/                ESP32 아두이노 스케치
     hello_blink.ino        시리얼 "hello" + LED 깜빡임
   camera_blink/
     camera_blink.ino       카메라 MJPEG 스트림(:81/stream) + LED 속도 제어(:80/blink?ms=N)
+                           카메라는 /stream·/capture 요청 중에만 켬 (발열 감소, 사용 수는 뮤텍스로 관리)
     secrets.h.example      와이파이 정보 템플릿 → secrets.h로 복사해서 사용
 host/                    PC에서 실행하는 파이썬 코드
   environment.yml        conda 환경 정의

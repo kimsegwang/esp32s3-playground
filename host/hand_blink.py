@@ -23,7 +23,7 @@ import mediapipe as mp
 import requests
 from mediapipe.tasks.python import BaseOptions, vision
 
-from esp32cam_stream import MjpegStream, should_quit
+from esp32cam_stream import MjpegStream, should_quit, waiting_screen
 
 WINDOW = "hand_blink"
 MODEL_PATH = Path(__file__).parent / "models" / "hand_landmarker.task"
@@ -104,7 +104,8 @@ def main() -> int:
         running_mode=vision.RunningMode.VIDEO,
         num_hands=1,
     )
-    stream = MjpegStream(f"http://{args.host}:81/stream")
+    stream_url = f"http://{args.host}:81/stream"
+    stream = MjpegStream(stream_url)
     blink = BlinkController(args.host)
     cv2.namedWindow(WINDOW)
 
@@ -117,8 +118,10 @@ def main() -> int:
             while True:
                 frame_id, frame = stream.read()
                 if frame is None or frame_id == last_id:
-                    if frame is None and stream.error:
-                        print(f"waiting for stream... {stream.error}", file=sys.stderr)
+                    if frame is None:
+                        cv2.imshow(WINDOW, waiting_screen(stream_url, stream.error))
+                        if stream.error:
+                            print(f"waiting for stream... {stream.error}", file=sys.stderr)
                         time.sleep(0.5)
                     if should_quit(WINDOW):
                         break
